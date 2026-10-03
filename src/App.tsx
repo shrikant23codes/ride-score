@@ -1,6 +1,6 @@
 import { useEffect, useReducer, useRef, useState } from 'react'
 import { registerSW } from 'virtual:pwa-register'
-import { RideRecorder, requestMotionPermission } from './ride/recorder'
+import { RideRecorder, requestLocationPermission, requestMotionPermission } from './ride/recorder'
 import { scoreRide } from './ride/scoring'
 import { deleteRide, getRecoverableRide, saveRide } from './ride/storage'
 import type { RecordingStatus, Ride } from './ride/types'
@@ -71,11 +71,14 @@ export default function App() {
   const startRide = async (): Promise<void> => {
     dispatch({ type: 'REQUEST' })
     try {
-      await requestMotionPermission()
+      // Start both browser permission requests within the Start Ride tap handler.
+      const locationPermission = requestLocationPermission()
+      const motionPermission = requestMotionPermission()
+      const [initialLocation] = await Promise.all([locationPermission, motionPermission])
       const nextRecorder = new RideRecorder((nextStatus) => setStatus(nextStatus))
       recorder.current = nextRecorder
       setStatus(initialStatus)
-      const ride = await nextRecorder.start()
+      const ride = await nextRecorder.start(initialLocation)
       dispatch({ type: 'RECORDING', ride })
     } catch (error) {
       recorder.current = undefined
@@ -136,7 +139,7 @@ export default function App() {
         </section>
       ) : null}
       {(state.phase === 'permission-denied' || state.phase === 'error') ? (
-        <section className="panel"><p className="eyebrow">{state.phase === 'permission-denied' ? 'Permission needed' : 'Something went wrong'}</p><h1>{state.message}</h1><button className="primary" onClick={startAnother}>Try again</button></section>
+        <section className="panel"><p className="eyebrow">{state.phase === 'permission-denied' ? 'Permission needed' : 'Something went wrong'}</p><h1>{state.message}</h1><button className="primary" onClick={startAnother}>Back to start</button></section>
       ) : null}
     </main>
   )

@@ -22,13 +22,27 @@ function positionToSample(position: GeolocationPosition): LocationSample {
   }
 }
 
-async function requestInitialLocation(): Promise<LocationSample> {
+function locationErrorMessage(error: GeolocationPositionError): string {
+  switch (error.code) {
+    case error.PERMISSION_DENIED:
+      return 'Location access was denied. Allow Location for this website in iPhone Settings, then try again.'
+    case error.POSITION_UNAVAILABLE:
+      return 'Your location is currently unavailable. Check Location Services and try again outside or near a window.'
+    case error.TIMEOUT:
+      return 'Location took too long to respond. Check Location Services and try again.'
+    default:
+      return `Location could not be requested: ${error.message || 'unknown error'}`
+  }
+}
+
+export async function requestLocationPermission(): Promise<LocationSample> {
   if (!navigator.geolocation) throw new Error('Location is not available in this browser.')
   return new Promise((resolve, reject) => {
     navigator.geolocation.getCurrentPosition(
       (position) => resolve(positionToSample(position)),
-      () => reject(new Error('Location permission was not granted.')),
-      { enableHighAccuracy: true, maximumAge: 0, timeout: 15_000 }
+      (error) => reject(new Error(locationErrorMessage(error))),
+      // A quick initial fix confirms permission; the recording watch requests high accuracy afterwards.
+      { enableHighAccuracy: false, maximumAge: 30_000, timeout: 15_000 }
     )
   })
 }
@@ -60,9 +74,8 @@ export class RideRecorder {
     this.listener = listener
   }
 
-  async start(): Promise<Ride> {
+  async start(initialLocation: LocationSample): Promise<Ride> {
     if (this.ride && !this.stopped) throw new Error('A ride is already being recorded.')
-    const initialLocation = await requestInitialLocation()
     const now = Date.now()
     this.ride = {
       id: makeId(),
